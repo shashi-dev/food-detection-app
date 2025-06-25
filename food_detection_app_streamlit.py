@@ -32,16 +32,39 @@ FOOD_CLASSES = [
 def load_model():
     """Load the YOLO model with caching for Streamlit."""
     try:
-        # Try to load from the expected path
-        model_path = "runs/detect/yolov8n_food101/weights/best.pt"
-        if os.path.exists(model_path):
-            model = YOLO(model_path)
-            st.success("✅ YOLO model loaded successfully!")
+        # Try multiple possible model paths
+        possible_paths = [
+            "runs/detect/yolov8n_food101/weights/best.pt",
+            "best.pt",
+            "model.pt",
+            "yolov8n_food101.pt",
+            "food_detection_model.pt"
+        ]
+        
+        model = None
+        loaded_path = None
+        
+        # Try each possible path
+        for model_path in possible_paths:
+            if os.path.exists(model_path):
+                try:
+                    model = YOLO(model_path)
+                    loaded_path = model_path
+                    break
+                except Exception as e:
+                    st.warning(f"⚠️  Failed to load model from {model_path}: {e}")
+                    continue
+        
+        if model is not None:
+            st.success(f"✅ Custom YOLO model loaded successfully from: {loaded_path}")
+            return model
         else:
-            st.warning("⚠️  Model not found at expected path. Using default YOLO model.")
+            st.warning("⚠️  No custom model found. Using default YOLOv8n model.")
+            st.info("💡 To use your custom model, add it to the repository as 'best.pt' or update the model path.")
             # Fallback to a smaller model for cloud deployment
             model = YOLO("yolov8n.pt")
-        return model
+            return model
+            
     except Exception as e:
         st.error(f"❌ Error loading YOLO model: {e}")
         return None
@@ -152,6 +175,25 @@ def main():
     st.sidebar.header("📊 App Information")
     st.sidebar.markdown(f"**Supported Food Classes:** {len(FOOD_CLASSES)}")
     st.sidebar.markdown("**Model:** YOLOv8")
+    
+    # Model upload section
+    with st.sidebar.expander("🤖 Upload Custom Model"):
+        st.markdown("Upload your custom YOLO model (.pt file)")
+        uploaded_model = st.file_uploader(
+            "Choose a YOLO model file",
+            type=['pt'],
+            key="model_uploader",
+            help="Upload your custom trained YOLO model"
+        )
+        
+        if uploaded_model is not None:
+            # Save the uploaded model
+            model_filename = uploaded_model.name
+            with open(model_filename, "wb") as f:
+                f.write(uploaded_model.getbuffer())
+            
+            st.success(f"✅ Model uploaded: {model_filename}")
+            st.info("🔄 Please refresh the page to load the new model.")
     
     # Display food classes
     with st.sidebar.expander("🍽️ Supported Food Items"):

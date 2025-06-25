@@ -132,13 +132,20 @@ dmypy.json
 # Project specific
 uploads/
 results/
-runs/
+# runs/  # Commented out to allow model files in runs directory
 
-# Model files (if they're large)
-*.pt
+# Model files (if they're large) - but allow specific model files
+# *.pt   # Commented out to allow model files
 *.pth
 *.onnx
 *.tflite
+
+# Allow specific model files
+!runs/detect/yolov8n_food101/weights/best.pt
+!best.pt
+!model.pt
+!yolov8n_food101.pt
+!food_detection_model.pt
 
 # Dataset files
 *.jpg
