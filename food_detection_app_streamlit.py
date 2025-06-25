@@ -163,6 +163,12 @@ def main():
     st.title("🍕 Food Detection Application")
     st.markdown("Upload an image to detect food items using YOLOv8!")
     
+    # Initialize session state
+    if 'uploaded_file' not in st.session_state:
+        st.session_state.uploaded_file = None
+    if 'processed_results' not in st.session_state:
+        st.session_state.processed_results = None
+    
     # Load model
     with st.spinner("Loading YOLO model..."):
         model = load_model()
@@ -206,63 +212,102 @@ def main():
     with col1:
         st.header("📤 Upload Image")
         
-        # File uploader
-        uploaded_file = st.file_uploader(
-            "Choose an image file",
-            type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'],
-            help="Upload an image to detect food items"
-        )
+        # Add a clear button to reset the uploader
+        if st.button("🔄 Clear Upload", help="Clear the current upload and start fresh"):
+            st.session_state.uploaded_file = None
+            st.session_state.processed_results = None
+            st.rerun()
         
-        if uploaded_file is not None:
-            # Display original image
-            st.subheader("📷 Original Image")
-            image = Image.open(uploaded_file)
-            st.image(image, caption="Uploaded Image", use_column_width=True)
+        # File uploader with better error handling
+        try:
+            uploaded_file = st.file_uploader(
+                "Choose an image file",
+                type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'],
+                key="image_uploader",
+                help="Upload an image to detect food items (max 16MB)",
+                on_change=lambda: setattr(st.session_state, 'uploaded_file', None)
+            )
             
-            # Process button
-            if st.button("🔍 Detect Food Items", type="primary"):
-                with st.spinner("Processing image..."):
-                    # Process the image
-                    results = process_image(image, model)
+            # Store uploaded file in session state
+            if uploaded_file is not None:
+                st.session_state.uploaded_file = uploaded_file
+                
+                # Display original image
+                st.subheader("📷 Original Image")
+                try:
+                    image = Image.open(uploaded_file)
+                    st.image(image, caption=f"Uploaded: {uploaded_file.name}", use_column_width=True)
                     
-                    if results.get('success'):
-                        st.success(f"✅ Found {results['total_detections']} food items!")
-                        
-                        # Display results
-                        st.subheader("🎯 Detection Results")
-                        
-                        # Create results table
-                        if results['detections']:
-                            detection_data = []
-                            for detection in results['detections']:
-                                detection_data.append({
-                                    'Food Item': detection['class_name'],
-                                    'Confidence': f"{detection['confidence']}%",
-                                    'Bounding Box': f"({detection['bbox'][0]}, {detection['bbox'][1]}) to ({detection['bbox'][2]}, {detection['bbox'][3]})"
-                                })
-                            
-                            st.dataframe(detection_data, use_container_width=True)
-                        
-                        # Draw detections on image
-                        annotated_image = draw_detections_on_image(image, results['detections'])
-                        
-                        with col2:
-                            st.subheader("🎨 Annotated Image")
-                            st.image(annotated_image, caption="Detected Food Items", use_column_width=True)
-                            
-                            # Download button for annotated image
-                            buf = io.BytesIO()
-                            annotated_image.save(buf, format='PNG')
-                            byte_im = buf.getvalue()
-                            
-                            st.download_button(
-                                label="📥 Download Annotated Image",
-                                data=byte_im,
-                                file_name="annotated_food_detection.png",
-                                mime="image/png"
-                            )
-                    else:
-                        st.error(f"❌ Error: {results.get('error', 'Unknown error')}")
+                    # Show file info
+                    file_size = len(uploaded_file.getvalue()) / (1024 * 1024)  # MB
+                    st.info(f"📁 File: {uploaded_file.name} ({file_size:.2f} MB)")
+                    
+                    # Process button
+                    if st.button("🔍 Detect Food Items", type="primary", key="detect_button"):
+                        with st.spinner("Processing image..."):
+                            try:
+                                # Process the image
+                                results = process_image(image, model)
+                                st.session_state.processed_results = results
+                                
+                                if results.get('success'):
+                                    st.success(f"✅ Found {results['total_detections']} food items!")
+                                    
+                                    # Display results
+                                    st.subheader("🎯 Detection Results")
+                                    
+                                    # Create results table
+                                    if results['detections']:
+                                        detection_data = []
+                                        for detection in results['detections']:
+                                            detection_data.append({
+                                                'Food Item': detection['class_name'],
+                                                'Confidence': f"{detection['confidence']}%",
+                                                'Bounding Box': f"({detection['bbox'][0]}, {detection['bbox'][1]}) to ({detection['bbox'][2]}, {detection['bbox'][3]})"
+                                            })
+                                        
+                                        st.dataframe(detection_data, use_container_width=True)
+                                    
+                                    # Draw detections on image
+                                    annotated_image = draw_detections_on_image(image, results['detections'])
+                                    
+                                    with col2:
+                                        st.subheader("🎨 Annotated Image")
+                                        st.image(annotated_image, caption="Detected Food Items", use_column_width=True)
+                                        
+                                        # Download button for annotated image
+                                        buf = io.BytesIO()
+                                        annotated_image.save(buf, format='PNG')
+                                        byte_im = buf.getvalue()
+                                        
+                                        st.download_button(
+                                            label="📥 Download Annotated Image",
+                                            data=byte_im,
+                                            file_name=f"annotated_{uploaded_file.name}",
+                                            mime="image/png"
+                                        )
+                                else:
+                                    st.error(f"❌ Error: {results.get('error', 'Unknown error')}")
+                                    
+                            except Exception as e:
+                                st.error(f"❌ Processing error: {str(e)}")
+                                
+                except Exception as e:
+                    st.error(f"❌ Error loading image: {str(e)}")
+                    st.info("💡 Try uploading a different image file.")
+                    
+        except Exception as e:
+            st.error(f"❌ Upload error: {str(e)}")
+            st.info("💡 Try refreshing the page or using a different browser.")
+        
+        # Alternative upload method
+        st.markdown("---")
+        st.markdown("**Alternative Upload Method:**")
+        st.markdown("If the upload button is stuck, try:")
+        st.markdown("1. Refresh the page")
+        st.markdown("2. Use the 'Clear Upload' button above")
+        st.markdown("3. Try a different browser")
+        st.markdown("4. Check your internet connection")
     
     # Footer
     st.markdown("---")
